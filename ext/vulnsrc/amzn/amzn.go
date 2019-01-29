@@ -82,14 +82,12 @@ func (u *updater) Update(datastore database.Datastore) (vulnsrc.UpdateResponse, 
 	log.WithField("package", u.Name).Info("Start fetching vulnerabilities")
 
 	// Get the flag value (the timestamp of the latest ALAS of the previous update).
-	flagValue, found, err := database.FindKeyValueAndRollback(datastore, u.UpdaterFlag)
+	_, err := datastore.GetKeyValue(u.UpdaterFlag)
 	if err != nil {
 		return vulnsrc.UpdateResponse{}, err
 	}
 
-	if !found {
-		flagValue = ""
-	}
+	flagValue := ""
 
 	var timestamp string
 
@@ -241,19 +239,17 @@ func decodeUpdateInfo(updateInfoReader io.Reader) (UpdateInfo, error) {
 	return updateInfo, nil
 }
 
-func (u *updater) alasListToVulnerabilities(alasList []ALAS) []database.VulnerabilityWithAffected {
-	var vulnerabilities []database.VulnerabilityWithAffected
+func (u *updater) alasListToVulnerabilities(alasList []ALAS) []database.Vulnerability {
+	var vulnerabilities []database.Vulnerability
 	for _, alas := range alasList {
 		featureVersions := u.alasToFeatureVersions(alas)
 		if len(featureVersions) > 0 {
-			vulnerability := database.VulnerabilityWithAffected{
-				Vulnerability: database.Vulnerability{
-					Name:        u.alasToName(alas),
-					Link:        u.alasToLink(alas),
-					Severity:    u.alasToSeverity(alas),
-					Description: u.alasToDescription(alas),
-				},
-				Affected: featureVersions,
+			vulnerability := database.Vulnerability{
+				Name:        u.alasToName(alas),
+				Link:        u.alasToLink(alas),
+				Severity:    u.alasToSeverity(alas),
+				Description: u.alasToDescription(alas),
+				FixedIn:     featureVersions,
 			}
 			vulnerabilities = append(vulnerabilities, vulnerability)
 		}
@@ -301,8 +297,8 @@ func (u *updater) alasToDescription(alas ALAS) string {
 	return re.ReplaceAllString(strings.TrimSpace(alas.Description), " ")
 }
 
-func (u *updater) alasToFeatureVersions(alas ALAS) []database.AffectedFeature {
-	var featureVersions []database.AffectedFeature
+func (u *updater) alasToFeatureVersions(alas ALAS) []database.FeatureVersion {
+	var featureVersions []database.FeatureVersion
 	for _, p := range alas.Packages {
 		var version string
 		if p.Epoch == "0" {
@@ -316,18 +312,19 @@ func (u *updater) alasToFeatureVersions(alas ALAS) []database.AffectedFeature {
 			continue
 		}
 
-		featureVersion := database.AffectedFeature{
-			Namespace: database.Namespace{
-				Name:          u.Namespace,
-				VersionFormat: rpm.ParserName,
+		featureVersion := database.FeatureVersion{
+			Feature: database.Feature{
+				Namespace: database.Namespace{
+					Name:          u.Namespace,
+					VersionFormat: rpm.ParserName,
+				},
+				Name: p.Name,
 			},
-			FeatureName:     p.Name,
-			AffectedVersion: version,
-			AffectedType:    database.AffectBinaryPackage,
+			Version: version,
 		}
 
 		if version != versionfmt.MaxVersion {
-			featureVersion.FixedInVersion = version
+			featureVersion.Version = version
 		}
 
 		featureVersions = append(featureVersions, featureVersion)

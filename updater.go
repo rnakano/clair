@@ -91,7 +91,7 @@ func RunUpdater(config *UpdaterConfig, datastore database.Datastore, st *stopper
 			log.WithError(err).Error("an error occured while getting the last update time")
 			nextUpdate = nextUpdate.Add(config.Interval)
 		} else if firstUpdate == false {
-			nextUpdate = lastUpdate.Add(config.Interval)
+			nextUpdate = lastUpdate.Add(60)
 		}
 
 		// If the next update timer is in the past, then try to update.
